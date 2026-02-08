@@ -3,6 +3,8 @@ package middleware
 import (
 	"context"
 	"g-aigateway/pkg/redis"
+	"log"
+	"net"
 	"net/http"
 	"time"
 )
@@ -28,19 +30,28 @@ end
 func RateLimitMiddleware(limit int, window time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 这里简单以 IP 作为限流标识
-			ip := r.RemoteAddr
-			ctx := context.Background()
-
-			// 执行 Lua 脚本
-			result, err := redis.RDB.Eval(ctx, limitScript, []string{"limit:" + ip}, limit, int(window.Seconds())).Int()
-
-			if err != nil || result == 0 {
-				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte("请求过于频繁，请稍后再试"))
-				return
+			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+			if host == "" || host == "::1" {
+				host = "127.0.0.1"
 			}
 
+			key := "limit:" + host
+			ctx := context.Background()
+
+			// 显式打印 window 的秒数，确认不是 0
+			windowSec := int(window.Seconds())
+
+			val, err := redis.RDB.Eval(ctx, limitScript, []string{key}, limit, windowSec).Int()
+
+			// 【关键日志】在终端看这里的 Current 变化
+			log.Printf("[RateLimit] Key: %s | Count: %d/%d | Window: %ds", key, val, limit, windowSec)
+
+			if err != nil || val == 0 {
+				log.Printf("[RateLimit] !!! 拦截请求: %s", host)
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte("Rate limit exceeded"))
+				return
+			}
 			next.ServeHTTP(w, r)
 		})
 	}
