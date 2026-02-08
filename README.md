@@ -25,7 +25,6 @@
   </a>
 </p>
 
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
 
 ## 🚀 G-AIGateway 是什么？
 
@@ -38,8 +37,6 @@
 
 G-AIGateway 的目标是把 LLM 调用当作**可治理的基础设施依赖**，而不是不可控的外部黑盒 API。
 
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
-
 ## 💡 为什么需要它？
 
 生产环境里的 LLM API 通常有三类典型问题：
@@ -49,8 +46,6 @@ G-AIGateway 的目标是把 LLM 调用当作**可治理的基础设施依赖**�
 - **稳定性差**：上游常见 429（限流）、网络抖动、偶发失败
 
 G-AIGateway 通过把“计算密集型的 LLM 调用”转化为“IO 密集型的缓存检索”，在不侵入业务代码的情况下完成降本与提速。
-
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
 
 ## ✨ 核心特性
 
@@ -64,8 +59,6 @@ G-AIGateway 通过把“计算密集型的 LLM 调用”转化为“IO 密集型
   - Embedding 向量 + 余弦相似度（Cosine Similarity）
   - 支持“模糊提问/近义表达”的语义召回复用
 
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
-
 ### 🛡 稳定性与流量治理
 
 - **分布式原子限流**
@@ -76,44 +69,19 @@ G-AIGateway 通过把“计算密集型的 LLM 调用”转化为“IO 密集型
   - 面向上游 429 / 临时失败
   - Exponential Backoff 策略屏蔽抖动（规划中/或已实现）
 
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
-
 ### 📦 向量存储优化
 
 - Embedding 向量二进制序列化（Little-endian Float32）
 - 避免 JSON 编解码开销，降低 Redis 带宽成本
 
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
 ### 📊 可观测性
 
 - 结构化日志记录：
   - Latency / Status Code / CacheHit（L1/L2）等关键信息
 - （规划）Prometheus `/metrics` 指标接口
 
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
-
 ## 🏗 系统架构
-
-```mermaid
-graph TD
-    Client --> Logger[Logger Middleware]
-    Logger --> Auth[Gateway Auth]
-    Auth --> RateLimit[Redis Lua RateLimiter]
-
-    subgraph Cache [Hybrid Semantic Cache]
-        RateLimit --> L1{L1: Hash Match?}
-        L1 -- Hit --> Return[Response]
-        L1 -- Miss --> L2{L2: Vector Similarity?}
-        L2 -- Hit --> Return
-    end
-
-    L2 -- Miss --> Proxy[Reverse Proxy]
-    Proxy --> Retry[Backoff Retry Transport]
-    Retry --> LLM[Upstream LLM API]
-
-    LLM --> CacheUpdate[Async Cache Update]
-    CacheUpdate --> Return
-```
+![alt text](image-1.png)
 
 ## 📈 性能表现（Benchmarks）
 > 以下数据示例用于说明趋势，实际结果与模型/网络/负载有关。
@@ -123,8 +91,6 @@ graph TD
 |平均时延|14,730 ms|1.27 ms|235 ms|
 |时延降低|-|99.9%|98.4%|
 |Token 消耗|100%|0%|<5%(仅Embedding)|
-
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
 
 ## 🧠 核心机制实现
 
@@ -140,7 +106,6 @@ graph TD
 - 限流原子性
   通过将限流逻辑封装在 Lua 脚本中发送给 Redis，确保了“检查-增加-过期设置”操作的原子性，避免了在高并发场景下因竞态条件导致的限流失效。
 
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
 
 ## 🚀 快速开始
 - 环境准备
@@ -159,7 +124,6 @@ graph TD
     EMBEDDING_MODEL=embedding-3
     ```
 
-<hr style="height:1px; border:none; border-top:1px solid #eeeeee; margin:10px 0;" />
 
 ## 🗺 路线图 (Roadmap)
 
