@@ -6,6 +6,7 @@ import (
 	"g-aigateway/pkg/redis"
 	"log"
 	"math"
+	"time"
 )
 
 // 确保指针类型 *RedisVectorStore 实现了 VectorStore 接口
@@ -26,9 +27,15 @@ func (s *RedisVectorStore) Add(ctx context.Context, item VectorItem) error {
 		"res": item.Response,
 		"p":   item.Prompt,
 	}
+	// 1. 写入哈希数据
+	if err := redis.RDB.HSet(ctx, key, data).Err(); err != nil {
+		return err
+	}
 
 	// 执行 Redis 写入
-	return redis.RDB.HSet(ctx, key, data).Err()
+	// return redis.RDB.HSet(ctx, key, data).Err()
+	// 为这个Hash Key 设置过期时间
+	return redis.RDB.Expire(ctx, key, 48*time.Hour).Err()
 }
 
 // Search 必须完全匹配接口定义: (ctx context.Context, queryVector []float32, threshold float32) (string, bool)
