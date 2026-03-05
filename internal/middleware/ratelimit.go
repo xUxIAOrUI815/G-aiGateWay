@@ -1,9 +1,9 @@
 package middleware
 
 import (
-	"context"
+	"fmt"
+	"g-aigateway/pkg/logger"
 	"g-aigateway/pkg/redis"
-	"log"
 	"net"
 	"net/http"
 	"time"
@@ -30,26 +30,34 @@ end
 func RateLimitMiddleware(limit int, window time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				host = r.RemoteAddr
+			}
 			if host == "" || host == "::1" {
 				host = "127.0.0.1"
 			}
 
-			key := "limit:" + host
-			ctx := context.Background()
+			key := "limit:" + host // 构造限流key
 
-			// 显式打印 window 的秒数，确认不是 0
-			windowSec := int(window.Seconds())
+			windowSec := int(window.Seconds()) // 转换窗口时长为秒数
 
-			val, err := redis.RDB.Eval(ctx, limitScript, []string{key}, limit, windowSec).Int()
+			val, err := redis.RDB.Eval(r.Context(), limitScript, []string{key}, limit, windowSec).Int() // 执行Redis Lua 脚本
 
-			// 【关键日志】在终端看这里的 Current 变化
-			log.Printf("[RateLimit] Key: %s | Count: %d/%d | Window: %ds", key, val, limit, windowSec)
+			if err != nil {
+				logger.Error("RATELIMIT", err, "Redis failure, falling back to Fail-Open mode")
 
-			if err != nil || val == 0 {
-				log.Printf("[RateLimit] !!! 拦截请求: %s", host)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if val == 0 {
+				logger.Info("RATELIMIT", fmt.Sprintf("Request blocked for host: %s (Current limit: %d/%ds)", host, limit, windowSec))
+
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", windowSec))
 				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte("Rate limit exceeded"))
+				w.Write([]byte("Too Many Requests - Rate limit exceeded"))
 				return
 			}
 			next.ServeHTTP(w, r)
