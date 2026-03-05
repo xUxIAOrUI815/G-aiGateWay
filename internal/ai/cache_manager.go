@@ -55,25 +55,7 @@ func (c *AICache) GetResponse(ctx context.Context, prompt string) (string, bool)
 
 // SetResponse 同步存入两级缓存
 func (c *AICache) SetResponse(ctx context.Context, prompt, response string) {
-	// h := calcHash(prompt)
 
-	// // 存入 L1: 精确匹配
-	// log.Printf("[Cache] 正在异步存入向量库...")
-	// redis.RDB.Set(ctx, "exact:"+h, response, 24*time.Hour)
-
-	// // 存入 L2: 向量匹配
-	// vec, err := GetEmbedding(prompt)
-	// if err != nil || vec == nil {
-	// 	return
-	// }
-
-	// _ = c.store.Add(ctx, VectorItem{
-	// 	ID:       h,
-	// 	Vector:   vec,
-	// 	Response: response,
-	// 	Prompt:   prompt,
-	// })
-	// log.Printf("[Cache] 向量库写入成功: %s", prompt)
 	h := calcHash(prompt)
 
 	logger.Info("CACHE", "Persisting response to L1(Exact) ...")
