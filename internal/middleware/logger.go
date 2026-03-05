@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"log"
+	"g-aigateway/pkg/logger"
 	"net/http"
 	"time"
 )
@@ -20,19 +20,14 @@ func (rw *responseWriter) WriteHeader(code int) {
 func LoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-
-		// 包装 ResponseWriter
 		rw := &responseWriter{w, http.StatusOK}
-
 		next.ServeHTTP(rw, r)
-
 		duration := time.Since(start)
 		cacheHit := rw.Header().Get("X-Cache-Hit")
 		if cacheHit == "" {
 			cacheHit = "false"
 		}
 
-		log.Printf("[METRIC] Method: %s | Path: %s | Status: %d | Latency: %v | CacheHit: %s",
-			r.Method, r.URL.Path, rw.statusCode, duration, cacheHit)
+		logger.Access(r.Method, r.URL.Path, rw.statusCode, duration, cacheHit)
 	})
 }
