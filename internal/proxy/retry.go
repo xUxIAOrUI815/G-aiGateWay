@@ -2,8 +2,9 @@ package proxy
 
 import (
 	"bytes"
+	"fmt"
+	"g-aigateway/pkg/logger"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"time"
@@ -18,10 +19,14 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var lastResp *http.Response
 	var lastErr error
 
-	// 为了能多次重试，我们需要缓存 Request Body
+	// 缓存请求体
 	var bodyBytes []byte
 	if req.Body != nil {
-		bodyBytes, _ = io.ReadAll(req.Body)
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for i := 0; i <= t.MaxRetries; i++ {
@@ -38,14 +43,30 @@ func (t *RetryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			lastErr = err
 
 			if i < t.MaxRetries {
-				// 指数退避：2^i * 100ms (100ms, 200ms, 400ms...)
+				if resp != nil {
+					io.Copy(io.Discard, resp.Body)
+					resp.Body.Close()
+				}
+
 				waitTime := time.Duration(math.Pow(2, float64(i))) * 100 * time.Millisecond
-				log.Printf("[Retry] 第 %d 次请求失败，等待 %v 后重试...", i+1, waitTime)
-				time.Sleep(waitTime)
-				continue
+				logger.Info("RETRY", fmt.Sprintf("Attempt %d failed. Waiting %v before retry...", i+1, waitTime))
+
+				select {
+				case <-time.After(waitTime):
+					continue
+				case <-req.Context().Done():
+					logger.Info("RETRY", "Request canceled by client, stopping retries")
+					return lastResp, req.Context().Err()
+				}
 			}
+		} else {
+			return resp, err
 		}
-		return resp, err
 	}
+
+	if lastErr != nil {
+		logger.Error("RETRY", lastErr, fmt.Sprintf("All %d retries exhausted", t.MaxRetries))
+	}
+
 	return lastResp, lastErr
 }
