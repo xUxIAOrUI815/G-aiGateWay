@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>G-AIGateway | 开发者控制台</title>
+    <style>
+        :root { --bg: #050505; --card: #121212; --primary: #00ff88; --text: #e0e0e0; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
+        .sidebar { width: 300px; background: var(--card); border-right: 1px solid #333; padding: 20px; display: flex; flex-direction: column; }
+        .main { flex: 1; display: flex; flex-direction: column; padding: 20px; overflow-y: auto; }
+        .chat-box { flex: 1; background: var(--card); border-radius: 12px; padding: 20px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #222; }
+        .input-area { display: flex; gap: 10px; }
+        input { flex: 1; background: #222; border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; outline: none; }
+        button { background: var(--primary); color: black; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .metric-card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+        .metric-val { font-size: 24px; font-weight: bold; color: var(--primary); margin-top: 5px; }
+        .tag { font-size: 12px; padding: 2px 6px; border-radius: 4px; margin-right: 5px; background: #333; }
+        .hit { color: #00ff88; border: 1px solid #00ff88; }
+        .miss { color: #ff4444; border: 1px solid #ff4444; }
+        pre { white-space: pre-wrap; word-wrap: break-word; font-size: 14px; color: #bbb; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>G-AIGateway</h2>
+        <div class="metric-card">
+            <div>上次响应耗时</div>
+            <div id="latency" class="metric-val">0 ms</div>
+        </div>
+        <div class="metric-card">
+            <div>缓存命中状态</div>
+            <div id="cacheStatus" class="metric-val">-</div>
+        </div>
+        <div style="font-size: 12px; color: #666;">
+            提示：尝试发送两个意思相近的问题来测试 L2 语义匹配。
+        </div>
+    </div>
+    <div class="main">
+        <div id="chatBox" class="chat-box">
+            <div style="color: #666;">等待提问...</div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="promptInput" placeholder="输入您的问题..." onkeypress="if(event.keyCode==13) ask()">
+            <button id="sendBtn" onclick="ask()">发送</button>
+        </div>
+    </div>
+
+    <script>
+        async function ask() {
+            const input = document.getElementById('promptInput');
+            const chatBox = document.getElementById('chatBox');
+            const sendBtn = document.getElementById('sendBtn');
+            const q = input.value.trim();
+            if(!q) return;
+
+            // UI 状态重置
+            input.value = '';
+            sendBtn.disabled = true;
+            const startTime = Date.now();
+            chatBox.innerHTML += `<div style="margin-bottom:15px"><b>User:</b> ${q}</div>`;
+
+            try {
+                const response = await fetch('/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: "deepseek-chat",
+                        messages: [{role: "user", content: q}],
+                        stream: false
+                    })
+                });
+
+                const duration = Date.now() - startTime;
+                const data = await response.json();
+                
+                // 更新指标
+                document.getElementById('latency').innerText = `${duration} ms`;
+                const isHit = response.headers.get('X-Cache-Hit') === 'true';
+                const statusEl = document.getElementById('cacheStatus');
+                statusEl.innerText = isHit ? "HIT" : "MISS";
+                statusEl.className = `metric-val ${isHit ? 'hit' : 'miss'}`;
+
+                // 显示回答
+                const content = data.choices[0].message.content;
+                chatBox.innerHTML += `<div style="margin-bottom:20px; color:#fff">
+                    <span class="tag ${isHit?'hit':'miss'}">${isHit?'Cached':'Live'}</span>
+                    <b>AI:</b><br><pre>${content}</pre>
+                </div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+            } catch (e) {
+                chatBox.innerHTML += `<div style="color:red">错误: ${e.message}</div>`;
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
